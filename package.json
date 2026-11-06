@@ -1,0 +1,56 @@
+{
+  "name": "cnstock",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "中国股票数据命令行工具与 MCP 服务：行情、财报、估值与研报，免 API Key、零配置。A-share market data CLI and MCP server.",
+  "license": "MIT",
+  "author": "WilShi",
+  "keywords": [
+    "a-share",
+    "stock",
+    "china",
+    "finance",
+    "cli",
+    "mcp",
+    "model-context-protocol",
+    "valuation",
+    "akshare"
+  ],
+  "bin": {
+    "cnstock": "./dist/cli.js",
+    "cnstock-mcp": "./dist/mcp.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepare": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node --experimental-strip-types --no-warnings src/cli.ts",
+    "smoke:mcp": "node --experimental-strip-types --no-warnings src/mcp.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsdown": "^0.13.0",
+    "typescript": "^5.9.0"
+  }
+}

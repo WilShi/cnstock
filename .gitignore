@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.pnpm-store/
+*.log
+.DS_Store
+
+# 本地生成的示例产物
+out/
