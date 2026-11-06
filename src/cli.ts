@@ -12,6 +12,9 @@ import {
 } from "./datasource/index.ts";
 import { computeTtm, formatMoney, formatPct, impliedGrowth, pickValuationModel, runDcf, runPbRoe, type DcfAssumptions } from "./analysis/valuation.ts";
 import { buildReport } from "./analysis/report.ts";
+import { getStockList, getMarketYear, type MarketRow } from "./datasource/market.ts";
+import { screenOne, TIER_LABEL, type Screening, type YearSet } from "./analysis/screen.ts";
+import { readCache, writeCache } from "./cache.ts";
 
 const VERSION = "0.1.0";
 
@@ -27,6 +30,8 @@ const USAGE = [
   "  financials <代码>        财报摘要与 TTM 折算",
   "  value <代码>             估值测算（自动选模型）",
   "  report <代码>            完整 Markdown 研究简报",
+  "  audit <代码>             财务排雷体检（分层信号 + 原始依据）",
+  "  scan                     全市场扫描，按分层列出公司",
   "",
   "选项：",
   "  --json                   输出 JSON",
@@ -35,6 +40,9 @@ const USAGE = [
   "  --growth <r>             净利润增速假设，默认 0.08",
   "  --discount <r>           折现率假设，默认 0.10",
   "  --terminal <r>           永续增速假设，默认 0.025",
+  "  --tier <red|yellow>      scan 只显示指定层级",
+  "  --limit <n>              scan 最多显示多少家，默认 50",
+  "  --refresh                忽略缓存，重新抓取全市场数据",
   "  -h, --help               显示帮助",
   "  -v, --version            显示版本",
   "",
@@ -49,17 +57,23 @@ interface Args {
   positional: string[];
   json: boolean;
   numbers: Record<string, number>;
+  flags: Record<string, string>;
+  refresh: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
   const positional: string[] = [];
   const numbers: Record<string, number> = {};
+  const flags: Record<string, string> = {};
   let json = false;
-  const numericFlags = new Set(["days", "periods", "growth", "discount", "terminal"]);
+  let refresh = false;
+  const numericFlags = new Set(["days", "periods", "growth", "discount", "terminal", "limit"]);
+  const stringFlags = new Set(["tier"]);
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--json") { json = true; continue; }
+    if (a === "--refresh") { refresh = true; continue; }
     if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = argv[i + 1];
@@ -68,12 +82,15 @@ function parseArgs(argv: string[]): Args {
         if (!Number.isFinite(n)) throw new Error(`参数 --${key} 需要一个数字，收到 "${next}"`);
         numbers[key] = n;
         i++;
+      } else if (stringFlags.has(key) && next !== undefined) {
+        flags[key] = next;
+        i++;
       }
       continue;
     }
     positional.push(a);
   }
-  return { command: positional.shift() ?? "", positional, json, numbers };
+  return { command: positional.shift() ?? "", positional, json, numbers, flags, refresh };
 }
 
 /** Visual width of a string, counting CJK characters as two columns. */
@@ -191,8 +208,103 @@ async function runValue(code: string, numbers: Record<string, number>): Promise<
   }
 }
 
+/** 股票列表也缓存：它是元数据，实时抓取会让扫描结果不可复现。 */
+async function loadStockList(refresh: boolean) {
+  const key = "stock-list";
+  if (!refresh) {
+    const cached = readCache<Awaited<ReturnType<typeof getStockList>>>(key);
+    if (cached) return cached;
+  }
+  const list = await getStockList();
+  writeCache(key, list);
+  return list;
+}
+
+/** 取某年年报全市场数据，带本地缓存（默认 12 小时）。 */
+async function loadMarketYear(year: number, refresh: boolean): Promise<Map<string, MarketRow>> {
+  const key = "market-" + year;
+  if (!refresh) {
+    const cached = readCache<MarketRow[]>(key);
+    if (cached) return new Map(cached.map((r) => [r.code, r]));
+  }
+  process.stderr.write("正在抓取 " + year + " 年报全市场数据…\n");
+  const m = await getMarketYear(year);
+  writeCache(key, [...m.values()]);
+  return m;
+}
+
+function printScreening(s: Screening): void {
+  console.log(`${s.name}（${s.code}）${s.industry ? "  " + s.industry : ""}${s.isSt ? "  [ST]" : ""}`);
+  console.log("  " + TIER_LABEL[s.tier]);
+  if (!s.signals.length) {
+    console.log("    未触发任何已验证的财务风险信号。");
+    console.log("    注意：这不代表公司没有风险，仅表示三项已验证信号均未触发。");
+    return;
+  }
+  for (const sig of s.signals) {
+    console.log(`    · ${sig.rule}：${sig.value}   （验证提升 ${sig.lift.toFixed(2)}x）`);
+    console.log(`      ${sig.evidence}`);
+  }
+}
+
+async function runAudit(code: string, refresh: boolean): Promise<number> {
+  const list = await loadStockList(refresh);
+  const meta = list.find((s) => s.code === code.replace(/^(sh|sz|bj)/i, ""));
+  const [y23, y24, y25] = await Promise.all([
+    loadMarketYear(2023, refresh),
+    loadMarketYear(2024, refresh),
+    loadMarketYear(2025, refresh),
+  ]);
+  const ys: YearSet = { y23: y23.get(code), y24: y24.get(code), y25: y25.get(code) };
+  if (!ys.y25) {
+    console.error(`未找到 ${code} 的 2025 年报数据（可能尚未披露）`);
+    return 1;
+  }
+  const s = screenOne(code, meta?.name ?? code, meta?.industry ?? null, meta?.isSt ?? false, ys);
+  printScreening(s);
+  return 0;
+}
+
+async function runScan(numbers: Record<string, number>, flags: Record<string, string>, refresh: boolean): Promise<number> {
+  const tierFilter = flags.tier;
+  const limit = numbers.limit ?? 50;
+  const [list, y23, y24, y25] = await Promise.all([
+    loadStockList(refresh),
+    loadMarketYear(2023, refresh),
+    loadMarketYear(2024, refresh),
+    loadMarketYear(2025, refresh),
+  ]);
+
+  const results: Screening[] = [];
+  for (const meta of list) {
+    const cur = y25.get(meta.code);
+    if (!cur || cur.totalParentEquity === null) continue;
+    const s = screenOne(meta.code, meta.name, meta.industry, meta.isSt, {
+      y23: y23.get(meta.code), y24: y24.get(meta.code), y25: cur,
+    });
+    if (tierFilter && s.tier !== tierFilter) continue;
+    if (s.tier === "green") continue;
+    results.push(s);
+  }
+
+  const order = { red: 0, yellow: 1, green: 2 } as const;
+  results.sort((a, b) => order[a.tier] - order[b.tier] || b.signals.length - a.signals.length);
+
+  const red = results.filter((r) => r.tier === "red").length;
+  const yellow = results.filter((r) => r.tier === "yellow").length;
+  console.log(`全市场扫描：检查 ${list.length} 家，[红] ${red} 家，[黄] ${yellow} 家`);
+  console.log("");
+  for (const s of results.slice(0, limit)) {
+    console.log(`${TIER_LABEL[s.tier].padEnd(10)} ${s.code} ${s.name}${s.isSt ? " [ST]" : ""}`);
+    for (const sig of s.signals) console.log(`    · ${sig.rule}：${sig.value}`);
+  }
+  if (results.length > limit) console.log(`\n（共 ${results.length} 家，已显示前 ${limit} 家，用 --limit 调整）`);
+  console.log("\n注意：信号只表示「需人工复核」，不构成投资建议。");
+  return 0;
+}
+
 async function main(argv: string[]): Promise<number> {
-  const { command, positional, json, numbers } = parseArgs(argv);
+  const { command, positional, json, numbers, flags, refresh } = parseArgs(argv);
 
   if (!command || command === "-h" || command === "--help" || command === "help") {
     console.log(USAGE);
@@ -263,6 +375,12 @@ async function main(argv: string[]): Promise<number> {
       if (json) { console.log(JSON.stringify({ code, markdown: md }, null, 2)); return 0; }
       console.log(md);
       return 0;
+    }
+    case "audit": {
+      return await runAudit(needCode(), refresh);
+    }
+    case "scan": {
+      return await runScan(numbers, flags, refresh);
     }
     default:
       console.error(`未知命令：${command}\n`);

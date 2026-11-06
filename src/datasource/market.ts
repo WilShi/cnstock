@@ -72,13 +72,20 @@ async function bulkReport(reportName: string, reportDate: string, pageSize = 500
       client: "WEB",
     });
     let json: any = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    let lastError = "";
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
         json = JSON.parse(await httpRequest(`${DATA_API}?${params}`, { headers: UA_REFERER, timeoutMs: 40000 }));
+        if (json?.success === false) throw new Error(String(json?.message ?? "接口返回失败"));
         break;
-      } catch {
+      } catch (e) {
+        lastError = (e as Error).message;
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       }
+    }
+    // 分页失败必须报错，不能静默返回部分数据 —— 否则同一份数据两次扫描结果会不一致。
+    if (json === null) {
+      throw new Error(`${reportName} 第 ${page} 页抓取失败（已重试 4 次）：${lastError}`);
     }
     const data: any[] = json?.result?.data ?? [];
     if (typeof json?.result?.pages === "number") pages = json.result.pages;
