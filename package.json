@@ -1,6 +1,6 @@
 {
   "name": "@wilshi/cnstock",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "中国股票数据命令行工具与 MCP 服务：行情、财报、估值与研报，免 API Key、零配置。A-share market data CLI and MCP server.",
   "license": "MIT",

@@ -6,6 +6,7 @@
  * value so output can be piped into jq or another program.
  */
 
+import { createRequire } from "node:module";
 import {
   getFinancials, getKline, getQuote, searchStocks,
   type FinancialPeriod, type Kline, type Quote,
@@ -16,7 +17,15 @@ import { getStockList, getMarketYear, type MarketRow } from "./datasource/market
 import { screenOne, TIER_LABEL, type Screening, type YearSet } from "./analysis/screen.ts";
 import { readCache, writeCache } from "./cache.ts";
 
-const VERSION = "0.1.0";
+// Read the version from package.json so it can never drift from the published
+// manifest; dist/cli.js sits one level below the package root.
+const VERSION: string = (() => {
+  try {
+    return createRequire(import.meta.url)("../package.json").version as string;
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 const USAGE = [
   "cnstock — 中国股票数据命令行工具（免 API Key）",
@@ -74,6 +83,9 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a === "--json") { json = true; continue; }
     if (a === "--refresh") { refresh = true; continue; }
+    // Long-form help/version are commands, not options: keep them positional so
+    // main() can dispatch on them instead of silently swallowing them here.
+    if (a === "--help" || a === "--version") { positional.push(a); continue; }
     if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = argv[i + 1];
