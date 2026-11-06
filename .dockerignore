@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.cnstock-cache
+.npm-cache
+*.tgz
+docs
+scripts
+*.pptx

@@ -8,6 +8,7 @@
  * Run: npx cnstock-mcp    (stdio transport)
  */
 
+import { VERSION } from "./version.ts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -15,7 +16,7 @@ import { getFinancials, getKline, getQuote, searchStocks } from "./datasource/in
 import { computeTtm, impliedGrowth, pickValuationModel, runDcf, runPbRoe } from "./analysis/valuation.ts";
 import { buildReport } from "./analysis/report.ts";
 
-const server = new McpServer({ name: "cnstock", version: "0.1.0" });
+const server = new McpServer({ name: "cnstock", version: VERSION });
 
 const json = (v: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(v, null, 2) }] });
 
