@@ -2,7 +2,7 @@
 
 > 一条命令拿到 A 股行情、财报、估值和研报。**免 API Key、零配置、多源自动降级。**
 
-![演示：查询行情与全市场财务排雷](docs/demo.gif)
+![演示：查询行情与全市场财务排雷](https://raw.githubusercontent.com/WilShi/cnstock/main/docs/demo.gif)
 
 > 上面是真实终端输出录制的动画，不是示意图。
 
