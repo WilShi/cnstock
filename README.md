@@ -11,7 +11,7 @@
 | | akshare | tushare | **cnstock** |
 | --- | --- | --- | --- |
 | 语言 | Python | Python | Node / TypeScript |
-| 安装 | `pip install akshare`（依赖重） | `pip install tushare` | `npx cnstock`（零安装） |
+| 安装 | `pip install akshare`（依赖重） | `pip install tushare` | `npx @wilshi/cnstock`（零安装） |
 | API Key | 不需要 | **需要 token** | **不需要** |
 | 接口失效时 | 直接报错 | 直接报错 | **自动切换备用数据源** |
 | 与 AI 集成 | 需要自己封装 | 需要自己封装 | **内置 MCP server** |
@@ -22,25 +22,25 @@
 
 ```bash
 # 直接用，不用安装
-npx cnstock quote 600519
+npx @wilshi/cnstock quote 600519
 
 # 检索股票
-npx cnstock search 茅台
+npx @wilshi/cnstock search 茅台
 
 # 财报 + TTM 折算
-npx cnstock financials 600519
+npx @wilshi/cnstock financials 600519
 
 # 估值测算
-npx cnstock value 600519 --growth 0.1 --discount 0.12
+npx @wilshi/cnstock value 600519 --growth 0.1 --discount 0.12
 
 # 生成完整研报
-npx cnstock report 600519 > 茅台研报.md
+npx @wilshi/cnstock report 600519 > 茅台研报.md
 ```
 
 任何命令加 `--json` 都输出结构化 JSON，方便管道处理：
 
 ```bash
-npx cnstock quote 600519 --json | jq .price
+npx @wilshi/cnstock quote 600519 --json | jq .price
 ```
 
 ## 命令一览
@@ -63,7 +63,7 @@ npx cnstock quote 600519 --json | jq .price
   "mcpServers": {
     "cnstock": {
       "command": "npx",
-      "args": ["-y", "cnstock-mcp"]
+      "args": ["-y", "--package", "@wilshi/cnstock", "cnstock-mcp"]
     }
   }
 }
@@ -104,13 +104,13 @@ TTM 口径        TTM = 2026年 三季报累计 + 2025年报 - 2025年同期
 
 ```bash
 # 单公司体检
-npx cnstock audit 600519
+npx @wilshi/cnstock audit 600519
 
 # 全市场扫描：分「高危 / 关注」两级
-npx cnstock scan --limit 20
+npx @wilshi/cnstock scan --limit 20
 
 # 只看高危
-npx cnstock scan --tier red
+npx @wilshi/cnstock scan --tier red
 ```
 
 ```
